@@ -1,75 +1,102 @@
-import json
-import base64
+import tkinter as tk
+from tkinter import messagebox
+import csv
 from cryptography.fernet import Fernet
 
-# Generate a key for encryption
-def generate_key():
-    return Fernet.generate_key()
+class MainPage(tk.Frame):
+    def __init__(self, parent, controller):
+        tk.Frame.__init__(self, parent)
+        self.controller = controller
 
-# Encrypt data
-def encrypt_data(key, data):
-    cipher_suite = Fernet(key)
-    encrypted_data = cipher_suite.encrypt(data.encode())
-    return encrypted_data
+        # Label for the main page
+        label = tk.Label(self, text="Main Page")
+        label.pack()
 
-# Decrypt data
-def decrypt_data(key, encrypted_data):
-    cipher_suite = Fernet(key)
-    decrypted_data = cipher_suite.decrypt(encrypted_data).decode()
-    return decrypted_data
+        # Button to logout
+        logout_button = tk.Button(self, text="Logout", command=self.logout)
+        logout_button.pack()
 
-# Load passwords from file
-def load_passwords(file_path, key):
-    try:
-        with open(file_path, 'rb') as file:
-            encrypted_passwords = json.load(file)
-            decrypted_passwords = {decrypt_data(key, encrypted_password): decrypt_data(key, encrypted_username) for encrypted_username, encrypted_password in encrypted_passwords.items()}
-        return decrypted_passwords
-    except (FileNotFoundError, json.JSONDecodeError):
-        return {}
+        # Listbox to display passwords
+        self.password_listbox = tk.Listbox(self)
+        self.password_listbox.pack()
 
-def save_passwords(file_path, passwords, key):
-    encrypted_passwords = {base64.b64encode(encrypt_data(key, username)).decode(): base64.b64encode(encrypt_data(key, password)).decode() for username, password in passwords.items()}
-    with open(file_path, 'w') as file:  # Open the file in text mode ('w')
-        json.dump(encrypted_passwords, file)
+        # Button to add new password
+        add_button = tk.Button(self, text="Add Password", command=self.controller.show_add_password)
+        add_button.pack()
 
-# Main function
-def main():
-    file_path = 'passwords.json'
-    key = generate_key()
+        # Load passwords from CSV
+        self.load_passwords()
 
-    # Load existing passwords or create a new dictionary
-    passwords = load_passwords(file_path, key)
+    def load_passwords(self):
+        try:
+            with open('passwords.csv', 'r') as file:
+                reader = csv.reader(file)
+                for row in reader:
+                    self.password_listbox.insert(tk.END, row[0])  # Display only titles
+        except FileNotFoundError:
+            messagebox.showerror("Error", "Password file not found.")
 
-    while True:
-        print("\nPassword Manager Menu:")
-        print("1. View saved passwords")
-        print("2. Add a new password")
-        print("3. Exit")
+    def logout(self):
+        self.controller.show_frame("LoginPage")
 
-        choice = input("Enter your choice: ")
+class AddPasswordPage(tk.Frame):
+    def __init__(self, parent, controller):
+        tk.Frame.__init__(self, parent)
+        self.controller = controller
 
-        if choice == '1':
-            if passwords:
-                print("\nSaved Passwords:")
-                for username, password in passwords.items():
-                    print(f"Username: {username}, Password: {password}")
-            else:
-                print("No passwords saved.")
+        # Entry fields for new password entry
+        title_label = tk.Label(self, text="Title:")
+        title_label.pack()
+        self.title_entry = tk.Entry(self)
+        self.title_entry.pack()
 
-        elif choice == '2':
-            username = input("Enter the username: ")
-            password = input("Enter the password: ")
-            passwords[username] = password
-            save_passwords(file_path, passwords, key)
-            print("Password saved successfully.")
+        username_label = tk.Label(self, text="Username:")
+        username_label.pack()
+        self.username_entry = tk.Entry(self)
+        self.username_entry.pack()
 
-        elif choice == '3':
-            print("Exiting...")
-            break
+        password_label = tk.Label(self, text="Password:")
+        password_label.pack()
+        self.password_entry = tk.Entry(self, show="*")
+        self.password_entry.pack()
 
-        else:
-            print("Invalid choice. Please enter a valid option.")
+        # Button to add new password
+        add_button = tk.Button(self, text="Add Password", command=self.add_password)
+        add_button.pack()
 
-if __name__ == "__main__":
-    main()
+        # Button to go back to main page
+        back_button = tk.Button(self, text="Back", command=self.go_to_main_page)
+        back_button.pack()
+
+    def add_password(self):
+        title = self.title_entry.get()
+        username = self.username_entry.get()
+        password = self.password_entry.get()
+
+        if not title or not username or not password:
+            messagebox.showerror("Error", "Please fill in all fields.")
+            return
+
+        # Generate key for encryption
+        key = Fernet.generate_key()
+        cipher_suite = Fernet(key)
+
+        # Encrypt username and password
+        encrypted_username = cipher_suite.encrypt(username.encode()).decode()
+        encrypted_password = cipher_suite.encrypt(password.encode()).decode()
+
+        try:
+            with open('passwords.csv', 'a', newline='') as file:
+                writer = csv.writer(file)
+                writer.writerow([title, encrypted_username, encrypted_password])
+            messagebox.showinfo("Success", "Password added successfully.")
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to add password: {str(e)}")
+
+        # Clear input fields
+        self.title_entry.delete(0, tk.END)
+        self.username_entry.delete(0, tk.END)
+        self.password_entry.delete(0, tk.END)
+
+    def go_to_main_page(self):
+        self.controller.show_frame("MainPage")
